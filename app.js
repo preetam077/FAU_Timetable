@@ -117,6 +117,7 @@ function setupKeyboard() {
       closeDetail();
       closeForm();
       closeConfirm();
+      closeMyCourses();
     }
     // Arrow keys for day navigation on schedule page
     if (document.getElementById('schedule-page').classList.contains('active')) {
@@ -359,6 +360,33 @@ function deleteCourse(id) {
   renderDayTabs();
   toast('Course deleted', 'success');
 }
+
+// ═══ My Courses List ═══
+
+function openMyCourses() {
+  const uniqueMap = new Map();
+  courses.forEach(c => {
+    if (!uniqueMap.has(c.name)) {
+      uniqueMap.set(c.name, { name: c.name, type: c.type, color: c.color || TYPE_COLORS[c.type] || TYPE_COLORS['Other'] });
+    }
+  });
+  const unique = [...uniqueMap.values()].sort((a, b) => a.name.localeCompare(b.name));
+
+  const list = document.getElementById('mycourses-list');
+  let html = `<div class="mycourses-count">${unique.length} course${unique.length !== 1 ? 's' : ''}</div>`;
+  unique.forEach((c, i) => {
+    html += `<div class="mycourses-item">
+      <span class="mycourses-num">${i + 1}.</span>
+      <span class="mycourses-dot" style="background:${c.color}"></span>
+      <span class="mycourses-name">${esc(c.name)}</span>
+      <span class="mycourses-type">${esc(c.type)}</span>
+    </div>`;
+  });
+  list.innerHTML = html;
+  document.getElementById('mycourses-modal').classList.remove('hidden');
+}
+
+function closeMyCourses() { document.getElementById('mycourses-modal').classList.add('hidden'); }
 
 // ═══ Course Form ═══
 
