@@ -15,11 +15,16 @@ const SUPABASE_ENABLED =
   SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY' &&
   SUPABASE_URL.startsWith('https://');
 
-let supabase = null;
+// NOTE: Variable is named _supabaseClient (not 'supabase') to avoid a naming
+// conflict with the CDN global window.supabase = { createClient, ... }.
+// Declaring `let supabase` after the CDN sets `window.supabase` throws
+// "Cannot redeclare block-scoped variable" in browsers, which silently
+// prevents ALL function definitions below from being registered.
+let _supabaseClient = null;
 
 if (SUPABASE_ENABLED) {
   try {
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    _supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   } catch (e) {
     console.warn('[Supabase] Failed to initialize client:', e);
   }
@@ -28,28 +33,28 @@ if (SUPABASE_ENABLED) {
 // ═══ Auth Helpers ═══
 
 async function supaSignUp(email, password) {
-  if (!supabase) throw new Error('Supabase not configured.');
-  const { data, error } = await supabase.auth.signUp({ email, password });
+  if (!_supabaseClient) throw new Error('Supabase not configured.');
+  const { data, error } = await _supabaseClient.auth.signUp({ email, password });
   if (error) throw error;
   return data;
 }
 
 async function supaSignIn(email, password) {
-  if (!supabase) throw new Error('Supabase not configured.');
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (!_supabaseClient) throw new Error('Supabase not configured.');
+  const { data, error } = await _supabaseClient.auth.signInWithPassword({ email, password });
   if (error) throw error;
   return data;
 }
 
 async function supaSignOut() {
-  if (!supabase) return;
-  const { error } = await supabase.auth.signOut();
+  if (!_supabaseClient) return;
+  const { error } = await _supabaseClient.auth.signOut();
   if (error) throw error;
 }
 
 async function supaResetPassword(email) {
-  if (!supabase) throw new Error('Supabase not configured.');
-  const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+  if (!_supabaseClient) throw new Error('Supabase not configured.');
+  const { data, error } = await _supabaseClient.auth.resetPasswordForEmail(email, {
     redirectTo: window.location.origin + window.location.pathname,
   });
   if (error) throw error;
@@ -57,27 +62,27 @@ async function supaResetPassword(email) {
 }
 
 function supaGetUser() {
-  if (!supabase) return Promise.resolve({ data: { user: null } });
-  return supabase.auth.getUser();
+  if (!_supabaseClient) return Promise.resolve({ data: { user: null } });
+  return _supabaseClient.auth.getUser();
 }
 
 function supaOnAuthStateChange(callback) {
-  if (!supabase) {
+  if (!_supabaseClient) {
     // No Supabase — immediately signal "no session" so app loads in local mode
     setTimeout(() => callback('SIGNED_OUT', null), 0);
-    return { data: { subscription: { unsubscribe: () => { } } } };
+    return { data: { subscription: { unsubscribe: () => {} } } };
   }
-  return supabase.auth.onAuthStateChange(callback);
+  return _supabaseClient.auth.onAuthStateChange(callback);
 }
 
 // ═══ Courses CRUD ═══
 
 async function fetchCoursesFromDb() {
-  if (!supabase) return [];
+  if (!_supabaseClient) return [];
   const { data: { user } } = await supaGetUser();
   if (!user) return [];
 
-  const { data, error } = await supabase
+  const { data, error } = await _supabaseClient
     .from('courses')
     .select('*')
     .eq('user_id', user.id)
@@ -129,12 +134,12 @@ function appCourseToDb(course, userId) {
 }
 
 async function saveCourseToDb(course) {
-  if (!supabase) return course;
+  if (!_supabaseClient) return course;
   const { data: { user } } = await supaGetUser();
   if (!user) throw new Error('Not authenticated');
 
   const row = appCourseToDb(course, user.id);
-  const { data, error } = await supabase
+  const { data, error } = await _supabaseClient
     .from('courses')
     .upsert(row, { onConflict: 'id' })
     .select()
@@ -145,8 +150,8 @@ async function saveCourseToDb(course) {
 }
 
 async function deleteCourseFromDb(courseId) {
-  if (!supabase) return;
-  const { error } = await supabase
+  if (!_supabaseClient) return;
+  const { error } = await _supabaseClient
     .from('courses')
     .delete()
     .eq('id', courseId);
@@ -155,11 +160,11 @@ async function deleteCourseFromDb(courseId) {
 }
 
 async function deleteAllCoursesFromDb() {
-  if (!supabase) return;
+  if (!_supabaseClient) return;
   const { data: { user } } = await supaGetUser();
   if (!user) return;
 
-  const { error } = await supabase
+  const { error } = await _supabaseClient
     .from('courses')
     .delete()
     .eq('user_id', user.id);
@@ -168,17 +173,17 @@ async function deleteAllCoursesFromDb() {
 }
 
 async function seedDefaultCourses() {
-  if (!supabase) return;
+  if (!_supabaseClient) return;
   const { data: { user } } = await supaGetUser();
   if (!user) return;
 
   const rows = DEFAULT_COURSES.map(c => {
     const row = appCourseToDb({ ...c, id: crypto.randomUUID() }, user.id);
-    delete row.id;
+    delete row.id; // Let DB generate UUIDs
     return row;
   });
 
-  const { error } = await supabase
+  const { error } = await _supabaseClient
     .from('courses')
     .insert(rows);
 
@@ -188,11 +193,11 @@ async function seedDefaultCourses() {
 // ═══ Exams CRUD ═══
 
 async function fetchExamsFromDb() {
-  if (!supabase) return [];
+  if (!_supabaseClient) return [];
   const { data: { user } } = await supaGetUser();
   if (!user) return [];
 
-  const { data, error } = await supabase
+  const { data, error } = await _supabaseClient
     .from('exams')
     .select('*')
     .eq('user_id', user.id)
@@ -232,14 +237,14 @@ function appExamToDb(exam, userId) {
 }
 
 async function saveExamToDb(exam) {
-  if (!supabase) return exam;
+  if (!_supabaseClient) return exam;
   const { data: { user } } = await supaGetUser();
   if (!user) throw new Error('Not authenticated');
 
   const row = appExamToDb(exam, user.id);
   if (!row.id) delete row.id;
 
-  const { data, error } = await supabase
+  const { data, error } = await _supabaseClient
     .from('exams')
     .upsert(row, { onConflict: 'id' })
     .select()
@@ -250,8 +255,8 @@ async function saveExamToDb(exam) {
 }
 
 async function deleteExamFromDb(examId) {
-  if (!supabase) return;
-  const { error } = await supabase
+  if (!_supabaseClient) return;
+  const { error } = await _supabaseClient
     .from('exams')
     .delete()
     .eq('id', examId);
@@ -260,11 +265,11 @@ async function deleteExamFromDb(examId) {
 }
 
 async function deleteAllExamsFromDb() {
-  if (!supabase) return;
+  if (!_supabaseClient) return;
   const { data: { user } } = await supaGetUser();
   if (!user) return;
 
-  const { error } = await supabase
+  const { error } = await _supabaseClient
     .from('exams')
     .delete()
     .eq('user_id', user.id);
