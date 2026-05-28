@@ -6,8 +6,8 @@
 
 // ── Supabase Config ──
 // Replace with your actual project values to enable cloud sync.
-const SUPABASE_URL = 'YOUR_SUPABASE_URL';
-const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const SUPABASE_URL = 'https://fmzrlkcgnmlxutocggw.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZtenJrbGxjZ25tbHh1dG9jZ2d3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5OTczOTMsImV4cCI6MjA5NTU3MzM5M30.NwVRiQZpyx6x7x9_UsbScrxl8C4kJuKp7ax5Gksm3eI';
 
 // ── Detect if Supabase is configured ──
 const SUPABASE_ENABLED =
@@ -65,7 +65,7 @@ function supaOnAuthStateChange(callback) {
   if (!supabase) {
     // No Supabase — immediately signal "no session" so app loads in local mode
     setTimeout(() => callback('SIGNED_OUT', null), 0);
-    return { data: { subscription: { unsubscribe: () => {} } } };
+    return { data: { subscription: { unsubscribe: () => { } } } };
   }
   return supabase.auth.onAuthStateChange(callback);
 }
