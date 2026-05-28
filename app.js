@@ -4,20 +4,34 @@
 
 // ── State ──
 let courses = [];
+let exams = [];
 let activeDay = '';
 let editingId = null;
+let editingExamId = null;
 let formCancelledDates = [];
+let examFormDate = '';
 
-// ── Init ──
+// ── Boot ──
+// auth.js calls initAuth() which (in local mode) immediately calls initApp()
 document.addEventListener('DOMContentLoaded', () => {
+  initAuth();
+});
+
+// Called by auth.js after a successful login or in local mode
+function initApp() {
   loadCourses();
+  loadExams();
   setupClock();
   setupTheme();
   setupKeyboard();
   detectDay();
   renderDayTabs();
   renderSchedule();
-});
+  renderManager();
+  renderExams();
+  navigateTo('schedule');
+}
+
 
 // ═══ Data Layer ═══
 
@@ -34,6 +48,23 @@ function loadCourses() {
 function saveCourses() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(courses));
 }
+
+// ── Exams Persistence ──
+const EXAMS_STORAGE_KEY = 'fau_exams_v1';
+
+function loadExams() {
+  const saved = localStorage.getItem(EXAMS_STORAGE_KEY);
+  if (saved) {
+    try { exams = JSON.parse(saved); } catch { exams = []; }
+  } else {
+    exams = [];
+  }
+}
+
+function saveExams() {
+  localStorage.setItem(EXAMS_STORAGE_KEY, JSON.stringify(exams));
+}
+
 
 function getTodayString() {
   return new Date().toISOString().slice(0, 10);
@@ -118,6 +149,8 @@ function setupKeyboard() {
       closeForm();
       closeConfirm();
       closeMyCourses();
+      closeExamDetail();
+      closeExamForm();
     }
     // Arrow keys for day navigation on schedule page
     if (document.getElementById('schedule-page').classList.contains('active')) {
@@ -127,6 +160,7 @@ function setupKeyboard() {
     }
   });
 }
+
 
 // ═══ Day Detection & Tabs ═══
 
@@ -291,29 +325,38 @@ function openDetail(id) {
 function closeDetail() { document.getElementById('detail-modal').classList.add('hidden'); }
 function closeDetailIfBackdrop(e) { if (e.target === e.currentTarget) closeDetail(); }
 
-// ═══ Page Toggle ═══
+// ═══ Page Navigation ═══
 
-function togglePage() {
-  const schedPage = document.getElementById('schedule-page');
-  const mgrPage = document.getElementById('manager-page');
-  const btn = document.getElementById('nav-toggle-text');
-  const title = document.getElementById('page-title');
+const PAGE_MAP = {
+  schedule: { pageId: 'schedule-page', btnId: 'nav-schedule-btn', title: 'My Schedule' },
+  manager:  { pageId: 'manager-page',  btnId: 'nav-manager-btn',  title: 'Course Manager' },
+  exams:    { pageId: 'exams-page',    btnId: 'nav-exams-btn',    title: 'Exam Timetable' },
+};
 
-  if (schedPage.classList.contains('active')) {
-    schedPage.classList.remove('active');
-    mgrPage.classList.add('active');
-    btn.textContent = '📅 View Schedule';
-    title.textContent = 'Course Manager';
-    renderManager();
-  } else {
-    mgrPage.classList.remove('active');
-    schedPage.classList.add('active');
-    btn.textContent = '⚙️ Manage Courses';
-    title.textContent = 'My Schedule';
-    renderSchedule();
-    renderDayTabs();
-  }
+function navigateTo(page) {
+  const target = PAGE_MAP[page];
+  if (!target) return;
+
+  // Hide all pages, deactivate all buttons
+  Object.values(PAGE_MAP).forEach(({ pageId, btnId }) => {
+    document.getElementById(pageId)?.classList.remove('active');
+    document.getElementById(btnId)?.classList.remove('active');
+  });
+
+  document.getElementById(target.pageId)?.classList.add('active');
+  document.getElementById(target.btnId)?.classList.add('active');
+  document.getElementById('page-title').textContent = target.title;
+
+  // Re-render the active page
+  if (page === 'schedule') { renderDayTabs(); renderSchedule(); }
+  if (page === 'manager')  renderManager();
+  if (page === 'exams')    renderExams();
 }
+
+// Legacy toggle kept for backwards compat
+function togglePage() { navigateTo('manager'); }
+
+
 
 // ═══ Manager ═══
 
@@ -687,3 +730,219 @@ function runConfetti() {
   }
   draw();
 }
+
+// ═══ Exams Page ═══
+
+// ── Render Exams List ──
+function renderExams() {
+  const container = document.getElementById('exams-list');
+  if (!container) return;
+
+  const todayStr = getTodayString();
+
+  const upcoming = exams.filter(e => e.examDate >= todayStr).sort((a, b) => a.examDate.localeCompare(b.examDate) || a.startTime.localeCompare(b.startTime));
+  const past     = exams.filter(e => e.examDate < todayStr).sort((a, b) => b.examDate.localeCompare(a.examDate));
+
+  if (exams.length === 0) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📝</div><h3>No exams yet</h3><p>Add your upcoming exams to keep track of them.</p></div>`;
+    return;
+  }
+
+  let html = '';
+
+  if (upcoming.length > 0) {
+    html += `<div class="day-group"><div class="day-group-title">🗓 Upcoming (${upcoming.length})</div>`;
+    upcoming.forEach(e => { html += examCard(e, todayStr); });
+    html += `</div>`;
+  }
+
+  if (past.length > 0) {
+    html += `<div class="day-group"><div class="day-group-title">⏹ Past (${past.length})</div>`;
+    past.forEach(e => { html += examCard(e, todayStr); });
+    html += `</div>`;
+  }
+
+  container.innerHTML = html;
+}
+
+function examCard(e, todayStr) {
+  const color = e.color || '#f59e0b';
+  const daysLeft = Math.ceil((new Date(e.examDate) - new Date(todayStr)) / 86400000);
+  let countdown = '';
+  if (daysLeft === 0)       countdown = '<span class="badge badge-live">🔴 Today!</span>';
+  else if (daysLeft === 1)  countdown = '<span class="badge badge-live">⚠️ Tomorrow</span>';
+  else if (daysLeft > 0)    countdown = `<span class="badge" style="background:#1e3a5f">${daysLeft}d left</span>`;
+  else                      countdown = '<span class="badge" style="background:#374151">Done</span>';
+
+  const modeIcon = e.mode === 'Online' ? '🔗' : '🏫';
+
+  return `<div class="manager-row" onclick="openExamDetail('${e.id}')" style="cursor:pointer">
+    <div class="manager-row-color" style="background:${color}"></div>
+    <div class="manager-row-info">
+      <div class="manager-row-name">${esc(e.subjectName)}</div>
+      <div class="manager-row-meta">${e.examDate} &middot; ${e.startTime}&ndash;${e.endTime} &middot; ${modeIcon} ${esc(e.mode)}${e.venue ? ' &middot; ' + esc(e.venue) : ''}</div>
+    </div>
+    <div class="manager-row-actions">
+      ${countdown}
+      <button class="manager-btn" onclick="event.stopPropagation(); openExamForm('${e.id}')" title="Edit">✏️</button>
+      <button class="manager-btn delete" onclick="event.stopPropagation(); deleteExam('${e.id}')" title="Delete">🗑️</button>
+    </div>
+  </div>`;
+}
+
+// ── Exam Detail Modal ──
+function openExamDetail(id) {
+  const e = exams.find(x => x.id === id);
+  if (!e) return;
+  const color = e.color || '#f59e0b';
+  const todayStr = getTodayString();
+  const daysLeft = Math.ceil((new Date(e.examDate) - new Date(todayStr)) / 86400000);
+  let countdownTxt = daysLeft === 0 ? 'Today!' : daysLeft === 1 ? 'Tomorrow' : daysLeft > 0 ? `In ${daysLeft} days` : 'Completed';
+
+  let html = `
+    <div class="detail-header">
+      <h2>${esc(e.subjectName)}</h2>
+      <div class="detail-type" style="color:${color}">${esc(e.mode)} Exam — ${countdownTxt}</div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-label">Date &amp; Time</div>
+      <div class="detail-value">${e.examDate} &middot; ${e.startTime}${e.endTime ? ' – ' + e.endTime : ''}</div>
+    </div>`;
+
+  if (e.venue) {
+    html += `<div class="detail-section">
+      <div class="detail-label">Venue</div>
+      <div class="detail-value">${esc(e.venue)}</div>
+    </div>`;
+  }
+
+  if (e.notes) {
+    html += `<div class="detail-section">
+      <div class="detail-label">Notes</div>
+      <div class="detail-value" style="white-space:pre-wrap">${esc(e.notes)}</div>
+    </div>`;
+  }
+
+  html += `<div class="detail-actions">
+    <button class="btn-accent" onclick="openExamForm('${e.id}'); closeExamDetail()">✏️ Edit Exam</button>
+  </div>`;
+
+  document.getElementById('exam-detail-content').innerHTML = html;
+  document.getElementById('exam-detail-modal').classList.remove('hidden');
+}
+
+function closeExamDetail() { document.getElementById('exam-detail-modal').classList.add('hidden'); }
+function closeExamDetailIfBackdrop(e) { if (e.target === e.currentTarget) closeExamDetail(); }
+
+// ── Exam Form ──
+function openExamForm(editId) {
+  editingExamId = editId || null;
+  const ex = editId ? exams.find(x => x.id === editId) : null;
+
+  document.getElementById('exam-form-title').textContent = ex ? 'Edit Exam' : 'Add New Exam';
+
+  const accentColor = ex?.color || '#f59e0b';
+
+  const form = document.getElementById('exam-form');
+  form.innerHTML = `
+    <div class="form-group">
+      <label>Subject Name *</label>
+      <input type="text" id="ef-name" value="${ex ? esc(ex.subjectName) : ''}" placeholder="e.g. Neural Network Theory">
+      <div class="form-error" id="ef-err-name">Subject name is required</div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Exam Date *</label>
+        <input type="date" id="ef-date" value="${ex ? ex.examDate : ''}">
+        <div class="form-error" id="ef-err-date">Exam date is required</div>
+      </div>
+      <div class="form-group">
+        <label>Mode</label>
+        <select id="ef-mode">
+          ${['In-Person', 'Online', 'Hybrid'].map(m => `<option value="${m}" ${ex && ex.mode === m ? 'selected' : ''}>${m}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Start Time</label>
+        <input type="time" id="ef-start" value="${ex ? ex.startTime : ''}">
+      </div>
+      <div class="form-group">
+        <label>End Time</label>
+        <input type="time" id="ef-end" value="${ex ? ex.endTime : ''}">
+        <div class="form-error" id="ef-err-end">End time must be after start</div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Venue / Room</label>
+      <input type="text" id="ef-venue" value="${ex ? esc(ex.venue) : ''}" placeholder="e.g. H10 Hörsaal 10">
+    </div>
+    <div class="form-group">
+      <label>Notes</label>
+      <textarea id="ef-notes" rows="3" placeholder="Additional info, allowed materials, etc." style="resize:vertical;width:100%;padding:10px;border-radius:8px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text1);font-size:.9rem">${ex ? esc(ex.notes) : ''}</textarea>
+    </div>
+    <div class="form-group">
+      <label>Card Color</label>
+      <input type="color" id="ef-color" value="${accentColor}">
+    </div>
+    <div class="form-submit-row">
+      <button class="btn-accent" onclick="saveExamForm()">💾 ${ex ? 'Save Changes' : 'Add Exam'}</button>
+      <button class="btn-outline" onclick="closeExamForm()">Cancel</button>
+    </div>
+  `;
+
+  document.getElementById('exam-form-modal').classList.remove('hidden');
+}
+
+function saveExamForm() {
+  document.querySelectorAll('#exam-form .form-error').forEach(e => e.classList.remove('show'));
+
+  const subjectName = document.getElementById('ef-name').value.trim();
+  const examDate    = document.getElementById('ef-date').value;
+  const startTime   = document.getElementById('ef-start').value;
+  const endTime     = document.getElementById('ef-end').value;
+  const mode        = document.getElementById('ef-mode').value;
+  const venue       = document.getElementById('ef-venue').value.trim();
+  const notes       = document.getElementById('ef-notes').value.trim();
+  const color       = document.getElementById('ef-color').value;
+
+  let valid = true;
+  if (!subjectName) { document.getElementById('ef-err-name').classList.add('show'); valid = false; }
+  if (!examDate)    { document.getElementById('ef-err-date').classList.add('show'); valid = false; }
+  if (startTime && endTime && endTime <= startTime) { document.getElementById('ef-err-end').classList.add('show'); valid = false; }
+
+  if (!valid) return;
+
+  if (editingExamId) {
+    const idx = exams.findIndex(e => e.id === editingExamId);
+    if (idx !== -1) {
+      exams[idx] = { ...exams[idx], subjectName, examDate, startTime, endTime, mode, venue, notes, color };
+    }
+    toast('Exam updated', 'success');
+  } else {
+    exams.push({
+      id: crypto.randomUUID(),
+      subjectName, examDate, startTime, endTime, mode, venue, notes, color
+    });
+    toast('Exam added', 'success');
+  }
+
+  saveExams();
+  renderExams();
+  closeExamForm();
+}
+
+function closeExamForm() {
+  document.getElementById('exam-form-modal').classList.add('hidden');
+  editingExamId = null;
+}
+function closeExamFormIfBackdrop(e) { if (e.target === e.currentTarget) closeExamForm(); }
+
+function deleteExam(id) {
+  exams = exams.filter(e => e.id !== id);
+  saveExams();
+  renderExams();
+  toast('Exam deleted', 'success');
+}
+

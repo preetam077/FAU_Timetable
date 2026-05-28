@@ -11,115 +11,181 @@
   <!-- ═══ Toast Container ═══ -->
   <div id="toast-container"></div>
 
-  <!-- ═══ Header ═══ -->
-  <header id="app-header">
-    <div class="header-inner">
-      <div class="header-left">
-        <div class="logo-mark">
-          <svg viewBox="0 0 32 32" width="32" height="32"><rect rx="8" width="32" height="32" fill="var(--accent)"/><text x="16" y="22" text-anchor="middle" fill="#fff" font-size="16" font-weight="700">F</text></svg>
+  <!-- ═══ Auth Page (Login / Sign Up / Reset) ═══ -->
+  <div id="auth-page" class="auth-page">
+    <div class="auth-bg-orbs">
+      <div class="auth-orb auth-orb-1"></div>
+      <div class="auth-orb auth-orb-2"></div>
+      <div class="auth-orb auth-orb-3"></div>
+    </div>
+    <div id="auth-form-container" class="auth-form-container"></div>
+  </div>
+
+  <!-- ═══ App Container (hidden until authenticated) ═══ -->
+  <div id="app-container" class="hidden">
+
+    <!-- ═══ Header ═══ -->
+    <header id="app-header">
+      <div class="header-inner">
+        <div class="header-left">
+          <div class="logo-mark">
+            <svg viewBox="0 0 32 32" width="32" height="32"><rect rx="8" width="32" height="32" fill="var(--accent)"/><text x="16" y="22" text-anchor="middle" fill="#fff" font-size="16" font-weight="700">F</text></svg>
+          </div>
+          <div class="header-title-group">
+            <h1 id="page-title">My Schedule</h1>
+            <p id="header-date" class="header-sub"></p>
+          </div>
         </div>
-        <div class="header-title-group">
-          <h1 id="page-title">My Schedule</h1>
-          <p id="header-date" class="header-sub"></p>
+        <div class="header-right">
+          <span id="header-clock" class="live-clock"></span>
+          <span id="next-class-badge" class="next-class-badge hidden"></span>
+          <button class="icon-btn" title="My Courses" aria-label="My Courses" onclick="openMyCourses()">📋</button>
+          <button id="theme-toggle" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">
+            <svg id="theme-icon-sun" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+            <svg id="theme-icon-moon" class="hidden" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+          </button>
+
+          <!-- Navigation Buttons -->
+          <div class="nav-buttons">
+            <button id="nav-schedule-btn" class="nav-btn active" onclick="navigateTo('schedule')">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <span>Schedule</span>
+            </button>
+            <button id="nav-manager-btn" class="nav-btn" onclick="navigateTo('manager')">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+              <span>Manage</span>
+            </button>
+            <button id="nav-exams-btn" class="nav-btn" onclick="navigateTo('exams')">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+              <span>Exams</span>
+            </button>
+          </div>
+
+          <!-- User Badge -->
+          <div id="user-badge" class="user-badge"></div>
         </div>
       </div>
-      <div class="header-right">
-        <span id="header-clock" class="live-clock"></span>
-        <span id="next-class-badge" class="next-class-badge hidden"></span>
-        <button class="icon-btn" title="My Courses" aria-label="My Courses" onclick="openMyCourses()">📋</button>
-        <button id="theme-toggle" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">
-          <svg id="theme-icon-sun" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-          <svg id="theme-icon-moon" class="hidden" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
-        </button>
-        <button id="nav-toggle" class="btn-primary" onclick="togglePage()">
-          <span id="nav-toggle-text">⚙️ Manage Courses</span>
-        </button>
-      </div>
-    </div>
-  </header>
+    </header>
 
-  <!-- ═══ Page 1: Schedule View ═══ -->
-  <main id="schedule-page" class="page active">
-    <!-- Day Tabs -->
-    <nav id="day-tabs" class="day-tabs" role="tablist"></nav>
+    <!-- ═══ Page 1: Schedule View ═══ -->
+    <main id="schedule-page" class="page active">
+      <!-- Day Tabs -->
+      <nav id="day-tabs" class="day-tabs" role="tablist"></nav>
 
-    <!-- Schedule Cards Container -->
-    <section id="schedule-cards" class="cards-grid" aria-label="Course schedule"></section>
+      <!-- Schedule Cards Container -->
+      <section id="schedule-cards" class="cards-grid" aria-label="Course schedule"></section>
 
-    <!-- Weekend Message -->
-    <section id="weekend-msg" class="weekend-msg hidden">
-      <div class="weekend-inner">
-        <div class="weekend-emoji">🎉</div>
-        <h2>No classes this weekend!</h2>
-        <p>Enjoy your time off. Your Monday schedule is shown above.</p>
-        <canvas id="confetti-canvas"></canvas>
-      </div>
-    </section>
-  </main>
-
-  <!-- ═══ Page 2: Course Manager ═══ -->
-  <main id="manager-page" class="page">
-    <div class="manager-header">
-      <div class="manager-header-left">
-        <h2>Course Manager</h2>
-        <p class="manager-sub">Add, edit, or remove courses from your schedule</p>
-      </div>
-      <div class="manager-actions">
-        <div class="search-wrap">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          <input type="text" id="course-search" placeholder="Search courses..." oninput="filterCourses()">
+      <!-- Weekend Message -->
+      <section id="weekend-msg" class="weekend-msg hidden">
+        <div class="weekend-inner">
+          <div class="weekend-emoji">🎉</div>
+          <h2>No classes this weekend!</h2>
+          <p>Enjoy your time off. Your Monday schedule is shown above.</p>
+          <canvas id="confetti-canvas"></canvas>
         </div>
-        <button class="btn-accent" onclick="openForm()">+ Add New Course</button>
-        <button class="btn-outline" onclick="exportCourses()" title="Export JSON">📤 Export</button>
-        <label class="btn-outline import-label" title="Import JSON">📥 Import
-          <input type="file" id="import-input" accept=".json" onchange="importCourses(event)" hidden>
-        </label>
-        <button class="btn-danger" onclick="confirmReset()">↩ Reset</button>
+      </section>
+    </main>
+
+    <!-- ═══ Page 2: Course Manager ═══ -->
+    <main id="manager-page" class="page">
+      <div class="manager-header">
+        <div class="manager-header-left">
+          <h2>Course Manager</h2>
+          <p class="manager-sub">Add, edit, or remove courses from your schedule</p>
+        </div>
+        <div class="manager-actions">
+          <div class="search-wrap">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            <input type="text" id="course-search" placeholder="Search courses..." oninput="filterCourses()">
+          </div>
+          <button class="btn-accent" onclick="openForm()">+ Add New Course</button>
+          <button class="btn-outline" onclick="exportCourses()" title="Export JSON">📤 Export</button>
+          <label class="btn-outline import-label" title="Import JSON">📥 Import
+            <input type="file" id="import-input" accept=".json" onchange="importCourses(event)" hidden>
+          </label>
+          <button class="btn-danger" onclick="confirmReset()">↩ Reset</button>
+        </div>
+      </div>
+      <div id="manager-list" class="manager-list"></div>
+    </main>
+
+    <!-- ═══ Page 3: Exam Timetable ═══ -->
+    <main id="exams-page" class="page">
+      <div class="manager-header">
+        <div class="manager-header-left">
+          <h2>📝 Exam Timetable</h2>
+          <p class="manager-sub">Manage your upcoming exams, dates, and venues</p>
+        </div>
+        <div class="manager-actions">
+          <button class="btn-accent" onclick="openExamForm()">+ Add Exam</button>
+        </div>
+      </div>
+      <div id="exams-list" class="exams-list"></div>
+    </main>
+
+    <!-- ═══ Course Detail Modal ═══ -->
+    <div id="detail-modal" class="modal-overlay hidden" onclick="closeDetailIfBackdrop(event)">
+      <div class="modal-card detail-card" onclick="event.stopPropagation()">
+        <button class="modal-close" onclick="closeDetail()" aria-label="Close">✕</button>
+        <div id="detail-content"></div>
       </div>
     </div>
-    <div id="manager-list" class="manager-list"></div>
-  </main>
 
-  <!-- ═══ Course Detail Modal ═══ -->
-  <div id="detail-modal" class="modal-overlay hidden" onclick="closeDetailIfBackdrop(event)">
-    <div class="modal-card detail-card" onclick="event.stopPropagation()">
-      <button class="modal-close" onclick="closeDetail()" aria-label="Close">✕</button>
-      <div id="detail-content"></div>
-    </div>
-  </div>
-
-  <!-- ═══ Course Form Modal ═══ -->
-  <div id="form-modal" class="modal-overlay hidden" onclick="closeFormIfBackdrop(event)">
-    <div class="modal-card form-card" onclick="event.stopPropagation()">
-      <button class="modal-close" onclick="closeForm()" aria-label="Close">✕</button>
-      <h3 id="form-title">Add New Course</h3>
-      <div id="course-form" class="course-form"></div>
-    </div>
-  </div>
-
-  <!-- ═══ Confirm Dialog ═══ -->
-  <div id="confirm-modal" class="modal-overlay hidden" onclick="closeConfirm()">
-    <div class="modal-card confirm-card" onclick="event.stopPropagation()">
-      <h3>Reset All Courses?</h3>
-      <p>This will delete all your changes and restore the default schedule. This action cannot be undone.</p>
-      <div class="confirm-actions">
-        <button class="btn-outline" onclick="closeConfirm()">Cancel</button>
-        <button class="btn-danger" onclick="resetCourses()">Yes, Reset</button>
+    <!-- ═══ Course Form Modal ═══ -->
+    <div id="form-modal" class="modal-overlay hidden" onclick="closeFormIfBackdrop(event)">
+      <div class="modal-card form-card" onclick="event.stopPropagation()">
+        <button class="modal-close" onclick="closeForm()" aria-label="Close">✕</button>
+        <h3 id="form-title">Add New Course</h3>
+        <div id="course-form" class="course-form"></div>
       </div>
     </div>
-  </div>
 
-  <!-- ═══ My Courses Modal ═══ -->
-  <div id="mycourses-modal" class="modal-overlay hidden" onclick="closeMyCourses()">
-    <div class="modal-card mycourses-card" onclick="event.stopPropagation()">
-      <button class="modal-close" onclick="closeMyCourses()" aria-label="Close">✕</button>
-      <h3 class="mycourses-title">📋 My Courses — SS 2026</h3>
-      <p class="mycourses-sub">All courses enrolled this semester</p>
-      <div id="mycourses-list"></div>
+    <!-- ═══ Exam Form Modal ═══ -->
+    <div id="exam-form-modal" class="modal-overlay hidden" onclick="closeExamFormIfBackdrop(event)">
+      <div class="modal-card form-card" onclick="event.stopPropagation()">
+        <button class="modal-close" onclick="closeExamForm()" aria-label="Close">✕</button>
+        <h3 id="exam-form-title">Add New Exam</h3>
+        <div id="exam-form" class="course-form"></div>
+      </div>
     </div>
-  </div>
 
+    <!-- ═══ Exam Detail Modal ═══ -->
+    <div id="exam-detail-modal" class="modal-overlay hidden" onclick="closeExamDetailIfBackdrop(event)">
+      <div class="modal-card detail-card" onclick="event.stopPropagation()">
+        <button class="modal-close" onclick="closeExamDetail()" aria-label="Close">✕</button>
+        <div id="exam-detail-content"></div>
+      </div>
+    </div>
+
+    <!-- ═══ Confirm Dialog ═══ -->
+    <div id="confirm-modal" class="modal-overlay hidden" onclick="closeConfirm()">
+      <div class="modal-card confirm-card" onclick="event.stopPropagation()">
+        <h3>Reset All Courses?</h3>
+        <p>This will delete all your changes and restore the default schedule. This action cannot be undone.</p>
+        <div class="confirm-actions">
+          <button class="btn-outline" onclick="closeConfirm()">Cancel</button>
+          <button class="btn-danger" onclick="resetCourses()">Yes, Reset</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ My Courses Modal ═══ -->
+    <div id="mycourses-modal" class="modal-overlay hidden" onclick="closeMyCourses()">
+      <div class="modal-card mycourses-card" onclick="event.stopPropagation()">
+        <button class="modal-close" onclick="closeMyCourses()" aria-label="Close">✕</button>
+        <h3 class="mycourses-title">📋 My Courses — SS 2026</h3>
+        <p class="mycourses-sub">All courses enrolled this semester</p>
+        <div id="mycourses-list"></div>
+      </div>
+    </div>
+
+  </div><!-- end #app-container -->
+
+  <!-- Scripts: order matters -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="data.js"></script>
+  <script src="supabase.js"></script>
+  <script src="auth.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
