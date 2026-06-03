@@ -18,9 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Called by auth.js after a successful login or in local mode
-function initApp() {
-  loadCourses();
-  loadExams();
+async function initApp() {
   setupClock();
   setupTheme();
   setupKeyboard();
@@ -30,39 +28,51 @@ function initApp() {
   renderManager();
   renderExams();
   navigateTo('schedule');
+
+  // Load all data from Supabase in parallel
+  await Promise.all([loadCourses(), loadExams()]);
+  renderDayTabs();
+  renderSchedule();
+  renderManager();
+  renderExams();
 }
 
 
-// ═══ Data Layer ═══
+// ═══ Data Layer (Supabase-first, no localStorage for data) ═══
 
-function loadCourses() {
-  const saved = localStorage.getItem(STORAGE_KEY);
-  if (saved) {
-    try { courses = JSON.parse(saved); } catch { courses = structuredClone(DEFAULT_COURSES); saveCourses(); }
-  } else {
-    courses = structuredClone(DEFAULT_COURSES);
-    saveCourses();
+async function loadCourses() {
+  if (typeof fetchCoursesFromDb === 'function') {
+    try {
+      courses = await fetchCoursesFromDb();
+      return;
+    } catch (err) {
+      console.warn('[Courses] Supabase fetch failed:', err);
+    }
   }
+  // Fallback for local/offline mode
+  courses = structuredClone(DEFAULT_COURSES);
 }
 
-function saveCourses() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(courses));
+async function saveCourses() {
+  // saveCourses is still called by parts of the app after mutations;
+  // in Supabase mode individual save is done per-operation, so this is a no-op.
 }
 
-// ── Exams Persistence ──
-const EXAMS_STORAGE_KEY = 'fau_exams_v1';
-
-function loadExams() {
-  const saved = localStorage.getItem(EXAMS_STORAGE_KEY);
-  if (saved) {
-    try { exams = JSON.parse(saved); } catch { exams = []; }
-  } else {
-    exams = [];
+// ── Exams Persistence (Supabase-only) ──
+async function loadExams() {
+  if (typeof fetchExamsFromDb === 'function') {
+    try {
+      exams = await fetchExamsFromDb();
+      return;
+    } catch (err) {
+      console.warn('[Exams] Supabase fetch failed:', err);
+    }
   }
+  exams = [];
 }
 
 function saveExams() {
-  localStorage.setItem(EXAMS_STORAGE_KEY, JSON.stringify(exams));
+  // No-op: all exam saves go through saveExamToDb() directly.
 }
 
 
@@ -396,11 +406,13 @@ function renderManager(filter = '') {
 
 function filterCourses() { renderManager(); }
 
-function deleteCourse(id) {
+async function deleteCourse(id) {
   courses = courses.filter(c => c.id !== id);
-  saveCourses();
   renderManager();
   renderDayTabs();
+  if (typeof deleteCourseFromDb === 'function') {
+    try { await deleteCourseFromDb(id); } catch (err) { console.warn('[Courses] Delete failed:', err); }
+  }
   toast('Course deleted', 'success');
 }
 
@@ -566,7 +578,7 @@ function renderCancelChips() {
   ).join('');
 }
 
-function saveForm() {
+async function saveForm() {
   // Clear errors
   document.querySelectorAll('.form-error').forEach(e => e.classList.remove('show'));
 
@@ -602,21 +614,29 @@ function saveForm() {
     const idx = courses.findIndex(c => c.id === editingId);
     if (idx !== -1) {
       courses[idx] = { ...courses[idx], name, startTime, endTime, room, buildingCode, type, isOnline, zoomLink, zoomMeetingId, lat, lng, color, cancelledDates: [...formCancelledDates] };
+      if (typeof saveCourseToDb === 'function') {
+        try { await saveCourseToDb(courses[idx]); } catch (err) { console.warn('[Courses] Save failed:', err); }
+      }
     }
     toast('Course updated', 'success');
   } else {
-    days.forEach(day => {
-      courses.push({
-        id: crypto.randomUUID(),
-        name, days: [day], startTime, endTime, room, buildingCode, type,
-        isOnline, zoomLink, zoomMeetingId, lat, lng, color,
-        cancelledDates: [...formCancelledDates]
-      });
-    });
+    const newCourses = days.map(day => ({
+      id: crypto.randomUUID(),
+      name, days: [day], startTime, endTime, room, buildingCode, type,
+      isOnline, zoomLink, zoomMeetingId, lat, lng, color,
+      cancelledDates: [...formCancelledDates]
+    }));
+    if (typeof saveCourseToDb === 'function') {
+      for (const c of newCourses) {
+        try { const saved = await saveCourseToDb(c); courses.push(saved); }
+        catch (err) { courses.push(c); console.warn('[Courses] Save failed:', err); }
+      }
+    } else {
+      courses.push(...newCourses);
+    }
     toast(`${days.length > 1 ? days.length + ' courses' : 'Course'} created`, 'success');
   }
 
-  saveCourses();
   renderManager();
   renderDayTabs();
   closeForm();
@@ -634,9 +654,14 @@ function closeFormIfBackdrop(e) { if (e.target === e.currentTarget) closeForm();
 function confirmReset() { document.getElementById('confirm-modal').classList.remove('hidden'); }
 function closeConfirm() { document.getElementById('confirm-modal').classList.add('hidden'); }
 
-function resetCourses() {
-  courses = structuredClone(DEFAULT_COURSES);
-  saveCourses();
+async function resetCourses() {
+  if (typeof deleteAllCoursesFromDb === 'function') {
+    try { await deleteAllCoursesFromDb(); } catch (err) { console.warn('[Courses] Delete all failed:', err); }
+  }
+  if (typeof seedDefaultCourses === 'function') {
+    try { await seedDefaultCourses(); } catch (err) { console.warn('[Courses] Seed failed:', err); }
+  }
+  await loadCourses();
   renderManager();
   renderDayTabs();
   closeConfirm();
@@ -739,53 +764,69 @@ function renderExams() {
   if (!container) return;
 
   const todayStr = getTodayString();
-
   const upcoming = exams.filter(e => e.examDate >= todayStr).sort((a, b) => a.examDate.localeCompare(b.examDate) || a.startTime.localeCompare(b.startTime));
   const past     = exams.filter(e => e.examDate < todayStr).sort((a, b) => b.examDate.localeCompare(a.examDate));
 
   if (exams.length === 0) {
-    container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📝</div><h3>No exams yet</h3><p>Add your upcoming exams to keep track of them.</p></div>`;
+    container.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-icon">📝</div><h3>No exams yet</h3><p>Add your upcoming exams to keep track of them.</p></div>`;
     return;
   }
 
   let html = '';
 
   if (upcoming.length > 0) {
-    html += `<div class="day-group"><div class="day-group-title">🗓 Upcoming (${upcoming.length})</div>`;
+    html += `<div class="exams-section-label" style="grid-column:1/-1">🗓 Upcoming <span>${upcoming.length}</span></div>`;
     upcoming.forEach(e => { html += examCard(e, todayStr); });
-    html += `</div>`;
   }
 
   if (past.length > 0) {
-    html += `<div class="day-group"><div class="day-group-title">⏹ Past (${past.length})</div>`;
+    html += `<div class="exams-section-label past-label" style="grid-column:1/-1">⏹ Past <span>${past.length}</span></div>`;
     past.forEach(e => { html += examCard(e, todayStr); });
-    html += `</div>`;
   }
 
   container.innerHTML = html;
 }
 
+
 function examCard(e, todayStr) {
   const color = e.color || '#f59e0b';
   const daysLeft = Math.ceil((new Date(e.examDate) - new Date(todayStr)) / 86400000);
-  let countdown = '';
-  if (daysLeft === 0)       countdown = '<span class="badge badge-live">🔴 Today!</span>';
-  else if (daysLeft === 1)  countdown = '<span class="badge badge-live">⚠️ Tomorrow</span>';
-  else if (daysLeft > 0)    countdown = `<span class="badge" style="background:#1e3a5f">${daysLeft}d left</span>`;
-  else                      countdown = '<span class="badge" style="background:#374151">Done</span>';
 
-  const modeIcon = e.mode === 'Online' ? '🔗' : '🏫';
+  let countdownClass = 'upcoming';
+  let countdownLabel = '';
+  if (daysLeft === 0)      { countdownClass = 'today';    countdownLabel = '🔴 Today'; }
+  else if (daysLeft === 1) { countdownClass = 'soon';     countdownLabel = '⚡ Tomorrow'; }
+  else if (daysLeft <= 7)  { countdownClass = 'soon';     countdownLabel = `${daysLeft}d left`; }
+  else if (daysLeft > 0)   { countdownClass = 'upcoming'; countdownLabel = `${daysLeft} days`; }
+  else                     { countdownClass = 'past';     countdownLabel = 'Done'; }
 
-  return `<div class="manager-row" onclick="openExamDetail('${e.id}')" style="cursor:pointer">
-    <div class="manager-row-color" style="background:${color}"></div>
-    <div class="manager-row-info">
-      <div class="manager-row-name">${esc(e.subjectName)}</div>
-      <div class="manager-row-meta">${e.examDate} &middot; ${e.startTime}&ndash;${e.endTime} &middot; ${modeIcon} ${esc(e.mode)}${e.venue ? ' &middot; ' + esc(e.venue) : ''}</div>
+  // Format date nicely: "Wed, 18 Jun 2026"
+  const dateObj = new Date(e.examDate + 'T00:00:00');
+  const niceDate = dateObj.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+
+  const modeIconMap = { 'Online': '💻', 'Hybrid': '🔄', 'In-Person': '🏛️' };
+  const modeIcon = modeIconMap[e.mode] || '🏛️';
+  const modeBadgeClass = e.mode === 'Online' ? 'online' : e.mode === 'Hybrid' ? 'hybrid' : 'in-person';
+
+  return `
+  <div class="exam-card" style="--card-accent:${color}" onclick="openExamDetail('${e.id}')">
+    <div class="exam-card-top">
+      <span class="exam-countdown ${countdownClass}">${countdownLabel}</span>
+      <div class="exam-card-actions">
+        <button class="manager-btn" onclick="event.stopPropagation(); openExamForm('${e.id}')" title="Edit">✏️</button>
+        <button class="manager-btn delete" onclick="event.stopPropagation(); deleteExam('${e.id}')" title="Delete">🗑️</button>
+      </div>
     </div>
-    <div class="manager-row-actions">
-      ${countdown}
-      <button class="manager-btn" onclick="event.stopPropagation(); openExamForm('${e.id}')" title="Edit">✏️</button>
-      <button class="manager-btn delete" onclick="event.stopPropagation(); deleteExam('${e.id}')" title="Delete">🗑️</button>
+    <div class="exam-card-subject">${esc(e.subjectName)}</div>
+    <div class="exam-card-date-row">
+      <span class="exam-card-date">📅 ${niceDate}</span>
+    </div>
+    <div class="exam-card-time-row">
+      <span class="exam-card-time">🕐 ${e.startTime}${e.endTime ? ' – ' + e.endTime : ''}</span>
+    </div>
+    <div class="exam-card-footer">
+      <span class="badge-mode ${modeBadgeClass}">${modeIcon} ${esc(e.mode)}</span>
+      ${e.venue ? `<span class="exam-card-venue">📍 ${esc(e.venue)}</span>` : ''}
     </div>
   </div>`;
 }
@@ -895,7 +936,7 @@ function openExamForm(editId) {
   document.getElementById('exam-form-modal').classList.remove('hidden');
 }
 
-function saveExamForm() {
+async function saveExamForm() {
   document.querySelectorAll('#exam-form .form-error').forEach(e => e.classList.remove('show'));
 
   const subjectName = document.getElementById('ef-name').value.trim();
@@ -914,23 +955,35 @@ function saveExamForm() {
 
   if (!valid) return;
 
+  let examObj;
   if (editingExamId) {
     const idx = exams.findIndex(e => e.id === editingExamId);
     if (idx !== -1) {
-      exams[idx] = { ...exams[idx], subjectName, examDate, startTime, endTime, mode, venue, notes, color };
+      examObj = { ...exams[idx], subjectName, examDate, startTime, endTime, mode, venue, notes, color };
+      exams[idx] = examObj;
     }
-    toast('Exam updated', 'success');
   } else {
-    exams.push({
-      id: crypto.randomUUID(),
-      subjectName, examDate, startTime, endTime, mode, venue, notes, color
-    });
-    toast('Exam added', 'success');
+    examObj = { id: crypto.randomUUID(), subjectName, examDate, startTime, endTime, mode, venue, notes, color };
+    exams.push(examObj);
   }
 
-  saveExams();
+  // Persist to Supabase (cloud) + localStorage (local cache)
+  if (typeof saveExamToDb === 'function' && examObj) {
+    try {
+      const saved = await saveExamToDb(examObj);
+      // Update local copy with DB-assigned id if it was a new record
+      const idx = exams.findIndex(e => e.id === examObj.id);
+      if (idx !== -1) exams[idx] = saved;
+    } catch (err) {
+      console.warn('[Exams] Supabase save failed, data saved locally only:', err);
+      toast('Saved locally — sync failed', 'info');
+    }
+  }
+
+  saveExams(); // always keep localStorage cache fresh
   renderExams();
   closeExamForm();
+  toast(editingExamId ? 'Exam updated' : 'Exam added', 'success');
 }
 
 function closeExamForm() {
@@ -939,10 +992,20 @@ function closeExamForm() {
 }
 function closeExamFormIfBackdrop(e) { if (e.target === e.currentTarget) closeExamForm(); }
 
-function deleteExam(id) {
+async function deleteExam(id) {
   exams = exams.filter(e => e.id !== id);
-  saveExams();
+  saveExams(); // update localStorage cache immediately
   renderExams();
+
+  // Also delete from Supabase so it's gone on all devices
+  if (typeof deleteExamFromDb === 'function') {
+    try {
+      await deleteExamFromDb(id);
+    } catch (err) {
+      console.warn('[Exams] Supabase delete failed:', err);
+    }
+  }
+
   toast('Exam deleted', 'success');
 }
 
