@@ -38,41 +38,115 @@ async function initApp() {
 }
 
 
-// ═══ Data Layer (Supabase-first, no localStorage for data) ═══
+// ═══ Data Layer (Supabase-primary, with one-time localStorage migration) ═══
+
+const STORAGE_KEY_COURSES = 'fau_schedule_v1';
+const STORAGE_KEY_EXAMS   = 'fau_exams_v1';
 
 async function loadCourses() {
-  if (typeof fetchCoursesFromDb === 'function') {
-    try {
-      courses = await fetchCoursesFromDb();
-      return;
-    } catch (err) {
-      console.warn('[Courses] Supabase fetch failed:', err);
-    }
+  if (typeof fetchCoursesFromDb !== 'function') {
+    // Local / offline mode — read from localStorage
+    const raw = localStorage.getItem(STORAGE_KEY_COURSES);
+    if (raw) { try { courses = JSON.parse(raw); return; } catch {} }
+    courses = structuredClone(DEFAULT_COURSES);
+    return;
   }
-  // Fallback for local/offline mode
-  courses = structuredClone(DEFAULT_COURSES);
+
+  try {
+    const dbCourses = await fetchCoursesFromDb();
+
+    if (dbCourses.length > 0) {
+      // Supabase has data — use it
+      courses = dbCourses;
+      return;
+    }
+
+    // ── DB is empty: check if we have localStorage data to migrate ──
+    const raw = localStorage.getItem(STORAGE_KEY_COURSES);
+    if (raw) {
+      let localCourses = [];
+      try { localCourses = JSON.parse(raw); } catch {}
+
+      if (localCourses.length > 0) {
+        toast('Syncing your data to the cloud…', 'info');
+        courses = [];
+        for (const c of localCourses) {
+          try {
+            const saved = await saveCourseToDb(c);
+            courses.push(saved);
+          } catch {
+            courses.push(c); // keep locally if upload fails
+          }
+        }
+        localStorage.removeItem(STORAGE_KEY_COURSES); // clear after migration
+        toast('✅ Data synced! It will now appear on all devices.', 'success');
+        return;
+      }
+    }
+
+    // Nothing anywhere — start empty
+    courses = [];
+  } catch (err) {
+    console.warn('[Courses] Supabase fetch failed, falling back to localStorage:', err);
+    const raw = localStorage.getItem(STORAGE_KEY_COURSES);
+    if (raw) { try { courses = JSON.parse(raw); return; } catch {} }
+    courses = structuredClone(DEFAULT_COURSES);
+  }
 }
 
 async function saveCourses() {
-  // saveCourses is still called by parts of the app after mutations;
-  // in Supabase mode individual save is done per-operation, so this is a no-op.
+  // No-op in Supabase mode — individual saves go through saveCourseToDb().
 }
 
-// ── Exams Persistence (Supabase-only) ──
+// ── Exams Persistence ──
 async function loadExams() {
-  if (typeof fetchExamsFromDb === 'function') {
-    try {
-      exams = await fetchExamsFromDb();
-      return;
-    } catch (err) {
-      console.warn('[Exams] Supabase fetch failed:', err);
-    }
+  if (typeof fetchExamsFromDb !== 'function') {
+    const raw = localStorage.getItem(STORAGE_KEY_EXAMS);
+    if (raw) { try { exams = JSON.parse(raw); return; } catch {} }
+    exams = [];
+    return;
   }
-  exams = [];
+
+  try {
+    const dbExams = await fetchExamsFromDb();
+
+    if (dbExams.length > 0) {
+      exams = dbExams;
+      return;
+    }
+
+    // ── DB is empty: migrate from localStorage if present ──
+    const raw = localStorage.getItem(STORAGE_KEY_EXAMS);
+    if (raw) {
+      let localExams = [];
+      try { localExams = JSON.parse(raw); } catch {}
+
+      if (localExams.length > 0) {
+        exams = [];
+        for (const e of localExams) {
+          try {
+            const saved = await saveExamToDb(e);
+            exams.push(saved);
+          } catch {
+            exams.push(e);
+          }
+        }
+        localStorage.removeItem(STORAGE_KEY_EXAMS);
+        return;
+      }
+    }
+
+    exams = [];
+  } catch (err) {
+    console.warn('[Exams] Supabase fetch failed, falling back to localStorage:', err);
+    const raw = localStorage.getItem(STORAGE_KEY_EXAMS);
+    if (raw) { try { exams = JSON.parse(raw); return; } catch {} }
+    exams = [];
+  }
 }
 
 function saveExams() {
-  // No-op: all exam saves go through saveExamToDb() directly.
+  // No-op in Supabase mode — saves go through saveExamToDb() directly.
 }
 
 
